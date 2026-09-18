@@ -5,6 +5,16 @@ public static class JumpTests {
     static void Check(bool v,string n){if(!v)throw new Exception("FAIL "+n);checks++;Debug.Log("PASS "+n);}
     public static void Run(){
         checks=0;
+        float lastGap=2.6f;
+        for(int i=0;i<100;i++){
+            float gap=JumpRules.PlatformGap(lastGap,(i*37%101)/100f);
+            Check(gap>=2.4f&&gap<=4.3f,"route gap within reachable range");
+            Check(Mathf.Abs(gap-lastGap)>=.65f,"successive gaps need different timing");
+            lastGap=gap;
+        }
+        float near=2.4f,far=4.3f;
+        Check(!JumpRules.Lands(Vector3.right*near,Vector3.right*far,2.2f),"near timing undershoots far platform");
+        Check(!JumpRules.Lands(Vector3.right*far,Vector3.right*near,2.2f),"far timing overshoots near platform");
         Check(Mathf.Approximately(JumpRules.Distance(0),.65f),"minimum jump");
         Check(Mathf.Approximately(JumpRules.Distance(1),4.65f),"full jump");
         Check(JumpRules.Distance(10)==JumpRules.Distance(1),"charge capped");

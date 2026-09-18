@@ -9,9 +9,9 @@ public sealed class JumpHud : MonoBehaviour {
     readonly List<Hit> hits=new List<Hit>();
     TMP_FontAsset display,body;Sprite rounded,solid;
     Canvas canvas;CanvasScaler scaler;JumpPhase visiblePhase;Transform title,result,pause,playHud;
-    TMP_Text score,best,coins,combo,district,toast,instructions,chargeLabel,resultScore,resultStats,resultTitle,resultMedal,muteLabel,assistLabel;
-    Image charge,aim,progress;float toastTime,scorePulse;
-    public Action StartClicked,PauseClicked,ResumeClicked,MuteClicked,AssistClicked;
+    TMP_Text score,best,coins,combo,district,toast,instructions,resultScore,resultStats,resultTitle,resultMedal,muteLabel;
+    Image progress;float toastTime,scorePulse;
+    public Action StartClicked,PauseClicked,ResumeClicked,MuteClicked;
     public void Initialize(){
         display=Resources.Load<TMP_FontAsset>("Fonts/DisplaySDF");body=Resources.Load<TMP_FontAsset>("Fonts/BodySDF");
         var tex=new Texture2D(32,32);tex.filterMode=FilterMode.Bilinear;
@@ -41,16 +41,10 @@ public sealed class JumpHud : MonoBehaviour {
         var prog=Panel(playHud,"District track",new Vector2(.5f,1),new Vector2(0,-78),new Vector2(230,7),new Color(.15f,.2f,.35f,.15f));
         progress=Panel(prog.transform,"Progress",new Vector2(.5f,.5f),Vector2.zero,new Vector2(230,7),JumpWorld.Red);progress.sprite=solid;progress.type=Image.Type.Filled;progress.fillMethod=Image.FillMethod.Horizontal;
         combo=Text(playHud,"",23,new Vector2(.5f,1),new Vector2(0,-118),new Vector2(350,40),JumpWorld.Red,true);
-        var footer=Panel(playHud,"Charge console",new Vector2(.5f,0),new Vector2(0,73),new Vector2(530,102),JumpWorld.Ink).transform;
-        instructions=Text(footer,"Hold to charge  •  Release to jump",18,new Vector2(0,26),new Vector2(500,30),JumpWorld.Cream);
-        var rail=Panel(footer,"Power rail",new Vector2(.5f,.5f),new Vector2(-35,-12),new Vector2(370,15),new Color(.4f,.48f,.62f));
-        charge=Panel(rail.transform,"Charge fill",new Vector2(.5f,.5f),Vector2.zero,new Vector2(370,15),JumpWorld.Yellow);charge.sprite=solid;charge.type=Image.Type.Filled;charge.fillMethod=Image.FillMethod.Horizontal;charge.fillAmount=0;
-        aim=Panel(rail.transform,"Sweet spot",new Vector2(0,.5f),Vector2.zero,new Vector2(5,25),JumpWorld.Cream);
-        chargeLabel=Text(footer,"0%",17,new Vector2(211,-12),new Vector2(70,30),JumpWorld.Yellow,true);
+        instructions=Text(playHud,"Judge the gap • Hold, then release",18,new Vector2(.5f,0),new Vector2(0,53),new Vector2(530,35),JumpWorld.Ink);
         Text(playHud,"Space to jump    Esc to pause    M for sound",14,new Vector2(.5f,0),new Vector2(0,14),new Vector2(650,22),JumpWorld.Ink);
         Button(playHud,"II",new Vector2(1,1),new Vector2(-48,-43),new Vector2(56,52),JumpWorld.Cream,()=>PauseClicked?.Invoke(),22);
         muteLabel=Button(transform,"Sound on",new Vector2(1,1),new Vector2(-151,-43),new Vector2(130,52),JumpWorld.Cream,()=>MuteClicked?.Invoke(),16);
-        assistLabel=Button(transform,"Guide on",new Vector2(1,0),new Vector2(-92,45),new Vector2(144,43),JumpWorld.Cream,()=>AssistClicked?.Invoke(),16);
         toast=Text(transform,"",38,new Vector2(.5f,.71f),Vector2.zero,new Vector2(740,80),JumpWorld.Red,true);
         toast.outlineWidth=.16f;toast.outlineColor=JumpWorld.Cream;
         pause=Panel(transform,"Pause card",new Vector2(.5f,.5f),Vector2.zero,new Vector2(440,300),JumpWorld.Cream).transform;
@@ -75,10 +69,7 @@ public sealed class JumpHud : MonoBehaviour {
         ((RectTransform)progress.transform.parent).anchoredPosition=new Vector2(0,narrow?-247:-78);
         combo.rectTransform.anchoredPosition=new Vector2(0,narrow?-281:-118);
         toast.rectTransform.anchoredPosition=new Vector2(0,narrow?-65:0);
-        bool top=narrow&&visiblePhase!=JumpPhase.Title&&visiblePhase!=JumpPhase.Result;
-        var anchor=new Vector2(1,top?1:0);var pos=new Vector2(-92,top?-182:45);
-        var guideRect=(RectTransform)assistLabel.transform.parent;guideRect.anchorMin=guideRect.anchorMax=anchor;guideRect.anchoredPosition=pos;
-        var shade=(RectTransform)transform.Find("Guide on shadow");shade.anchorMin=shade.anchorMax=anchor;shade.anchoredPosition=pos+Vector2.down*5;
+
     }
     void Stretch(Transform t){var r=(RectTransform)t;r.anchorMin=Vector2.zero;r.anchorMax=Vector2.one;r.offsetMin=r.offsetMax=Vector2.zero;}
     RectTransform Rect(Transform parent,string name,Vector2 anchor,Vector2 pos,Vector2 size){
@@ -109,15 +100,13 @@ public sealed class JumpHud : MonoBehaviour {
         if(phase==JumpPhase.Title||phase==JumpPhase.Result)toast.text="";
         foreach(var label in GetComponentsInChildren<TMP_Text>(true))label.ForceMeshUpdate(true);
     }
-    public void Settings(bool muted,bool guide){muteLabel.text=muted?"Sound off":"Sound on";assistLabel.text=guide?"Guide on":"Guide off";}
-    public void Refresh(JumpSession s,int record,float targetCharge,bool guide,float dt){
+    public void Settings(bool muted){muteLabel.text=muted?"Sound off":"Sound on";}
+    public void Refresh(JumpSession s,int record,float dt){
         score.text=s.Score.ToString("00");best.text="Best "+record.ToString("00");coins.text=s.Coins+" coins";
         combo.text=s.Combo>=2?s.Combo+" perfects in a row!":"";
         district.text=new[]{"Toybox rooftops","Candy coast","Vinyl avenue","Sunset parade"}[s.District%4];
-        progress.fillAmount=(s.Hops%12)/12f;charge.fillAmount=s.Phase==JumpPhase.Charging?s.Charge:0;
-        charge.color=s.Charge>.9f?JumpWorld.Red:JumpWorld.Yellow;chargeLabel.text=Mathf.RoundToInt(charge.fillAmount*100)+"%";
-        aim.gameObject.SetActive(guide);aim.rectTransform.anchoredPosition=new Vector2(Mathf.Clamp01(targetCharge)*370,0);
-        instructions.text=s.Phase==JumpPhase.Flight?"Stick the landing!":guide?"Aim for the white mark • release to jump":"Hold to charge • release to jump";
+        progress.fillAmount=(s.Hops%12)/12f;
+        instructions.text=s.Phase==JumpPhase.Flight?"Stick the landing!":"Judge the gap • Hold, then release";
         toastTime=Mathf.Max(0,toastTime-dt);if(toastTime==0)toast.text="";
         if(scorePulse>0)scorePulse=Mathf.Max(0,scorePulse-dt*4);
         score.transform.localScale=Vector3.one*(1+Mathf.Sin(scorePulse*Mathf.PI)*.18f);

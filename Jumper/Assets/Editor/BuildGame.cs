@@ -8,7 +8,11 @@ using TMPro;
 using UnityEngine.TextCore.LowLevel;
 public static class BuildGame {
     public static void BuildWebGL(){Build(BuildTarget.WebGL,"Build/WebGL");}
-    public static void BuildDesktop(){Build(BuildTarget.StandaloneOSX,"Build/Jump Jump.app");}
+    public static void BuildDesktop(){
+        string architecture=System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString()=="Arm64"?"ARM64":"x64";
+        EditorUserBuildSettings.SetPlatformSettings("OSXUniversal","Architecture",architecture);
+        Build(BuildTarget.StandaloneOSX,"Build/Jump Jump.app");
+    }
     public static void BuildMacOS(){
         string previous=EditorUserBuildSettings.GetPlatformSettings("OSXUniversal","Architecture");
         try {EditorUserBuildSettings.SetPlatformSettings("OSXUniversal","Architecture","x64ARM64");Build(BuildTarget.StandaloneOSX,"Build/macOS/Jump Jump.app");}

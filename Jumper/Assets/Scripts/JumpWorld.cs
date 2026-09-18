@@ -84,7 +84,8 @@ public sealed class JumpWorld : MonoBehaviour {
     void AddNext(){
         var prev=pads[pads.Count-1].Position;int n=generated;
         var direction=n==1?Vector3.right:(rng.NextDouble()>.48?Vector3.right:Vector3.forward);
-        float gap=n<3?3f:2.7f+(float)rng.NextDouble()*.95f;
+        float previousGap=pads.Count>1?Vector3.Distance(prev,pads[pads.Count-2].Position):2.6f;
+        float gap=n==1?2.6f:JumpRules.PlatformGap(previousGap,(float)rng.NextDouble());
         Add(prev+direction*gap);
     }
     void Add(Vector3 pos){

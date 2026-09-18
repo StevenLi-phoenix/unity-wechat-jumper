@@ -15,7 +15,7 @@ Do not modify the Flappy Bird repository to run this project.
 Verify cloud completion and actual live rendering separately.
 
 Version 1.1 presentation:
-- JumpSession is the pure run-state model; JumpTests has 38 rules/audio checks.
+- JumpSession is the pure run-state model; JumpTests has 240 rules/audio checks.
 - JumpWorld owns all geometry, cached materials, bounded platform history and effects.
 - JumpHud uses static TextMeshPro SDF atlases generated from the bundled Bungee/Lato fonts.
   Do not revert to dynamic legacy Text: score changes invalidated other glyph meshes.
@@ -32,3 +32,8 @@ Desktop releases:
 - scripts/check-release-version.mjs enforces tag parity; scripts/package-release.sh validates and archives complete players.
 - Release tests are included in node --test scripts/*.test.mjs.
 - Publishing waits for all three builds and attaches checksums. Do not create a version tag unless requested.
+
+Distance-based play: no charge meter, target timing marker, percentage or Guide toggle.
+JumpRules.PlatformGap varies center spacing from 2.4 to 4.3, at least 0.65 apart on successive jumps.
+Keep squash and rising sound as qualitative charge feedback; do not expose target charge in the HUD.
+BuildDesktop explicitly targets the local editor architecture for QA; BuildMacOS remains Universal for releases.

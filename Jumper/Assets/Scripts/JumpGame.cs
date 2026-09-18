@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 public sealed class JumpGame : MonoBehaviour {
     readonly JumpSession session=new JumpSession();
     JumpWorld world;JumpHud hud;JumpAudio sound;Camera cam;
-    Vector3 focus,start,end;float flight,fall,shake,elapsed;int best,initialBest;bool guide=true,qa;
+    Vector3 focus,start,end;float flight,fall,shake,elapsed;int best,initialBest;bool qa;
     void Start(){
         Application.targetFrameRate=60;
 #if !UNITY_WEBGL
@@ -20,10 +20,10 @@ public sealed class JumpGame : MonoBehaviour {
         world=new GameObject("Toybox rooftops").AddComponent<JumpWorld>();world.Initialize();
         hud=new GameObject("Postcard HUD").AddComponent<JumpHud>();hud.Initialize();
         sound=gameObject.AddComponent<JumpAudio>();sound.Initialize();
-        best=qa?0:PlayerPrefs.GetInt("JumperBest",0);guide=PlayerPrefs.GetInt("JumperGuide",1)==1;
+        best=qa?0:PlayerPrefs.GetInt("JumperBest",0);
         hud.StartClicked=StartRun;hud.PauseClicked=TogglePause;hud.ResumeClicked=TogglePause;
-        hud.MuteClicked=ToggleMute;hud.AssistClicked=()=>{guide=!guide;if(!qa){PlayerPrefs.SetInt("JumperGuide",guide?1:0);PlayerPrefs.Save();}hud.Settings(sound.Muted,guide);};
-        hud.Settings(sound.Muted,guide);
+        hud.MuteClicked=ToggleMute;
+        hud.Settings(sound.Muted);
         focus=(world.CurrentPad.Position+world.Next.Position)*.5f;
         UpdateCamera(1);Debug.Log("JUMPER_READY v1.1");
 #if !UNITY_WEBGL
@@ -32,9 +32,9 @@ public sealed class JumpGame : MonoBehaviour {
     }
     void StartRun(){
         world.Reset();session.StartRun();flight=fall=0;initialBest=best;focus=(world.CurrentPad.Position+world.Next.Position)*.5f;
-        sound.Begin();hud.Show(session.Phase);hud.Toast("Let's go!");Debug.Log("JUMPER_RUN_START");
+        sound.Begin();hud.Show(session.Phase);hud.Toast("Let's go!");Debug.Log("JUMPER_RUN_START: distance timing, no charge guide");
     }
-    void ToggleMute(){sound.Toggle();hud.Settings(sound.Muted,guide);}
+    void ToggleMute(){sound.Toggle();hud.Settings(sound.Muted);}
     void TogglePause(){
         if(session.Phase==JumpPhase.Paused){session.Resume();sound.Pause(false);}
         else {session.Pause();sound.Pause(session.Phase==JumpPhase.Paused);}
@@ -79,8 +79,7 @@ public sealed class JumpGame : MonoBehaviour {
         sound.Charge(session.Charge,session.Phase==JumpPhase.Charging);
         world.Animate(dt,focus,paused);
         if(!paused)UpdateCamera(dt);
-        float target=(Vector3.Distance(world.Pawn.position,world.Next.Position)-.65f)/4;
-        hud.Refresh(session,best,target,guide,paused?0:dt);
+        hud.Refresh(session,best,paused?0:dt);
     }
     void Launch(){
         if(session.Phase!=JumpPhase.Charging)return;
@@ -119,6 +118,9 @@ public sealed class JumpGame : MonoBehaviour {
     void Capture(string stage){ScreenCapture.CaptureScreenshot("/tmp/jumper-"+stage+(Screen.width<Screen.height?"-portrait":"")+".png");}
     IEnumerator QA(){
         yield return new WaitForSeconds(1);
+        foreach(var text in hud.GetComponentsInChildren<TMPro.TMP_Text>(true)){
+            if(text.text.Contains("%")||text.text.Contains("Guide")||text.text.Contains("white mark")){Debug.LogError("QA_FAILED timing hint exposed");Application.Quit(2);yield break;}
+        }
         Capture("title");yield return new WaitForSeconds(.3f);
         StartRun();yield return new WaitForSeconds(.3f);
         for(int i=0;i<15;i++){

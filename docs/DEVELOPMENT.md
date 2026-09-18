@@ -12,7 +12,7 @@ Run these commands from the repository root:
 
 The WebGL output is Jumper/Build/WebGL; serve that directory over HTTP. The desktop test script builds a macOS player and checks fifteen landings, bounded platforms, pause, results and retry in landscape and portrait. Screenshot fixtures in /tmp/jumper-*.png do not change saved best scores.
 
-Every Unity build runs 38 gameplay/audio checks. Node tests cover WebGL validation, release version matching, archive contents, executable permissions and incomplete-build rejection.
+Every Unity build runs 240 gameplay/audio checks. Node tests cover WebGL validation, release version matching, archive contents, executable permissions and incomplete-build rejection.
 
 Editor batch entry points:
 
