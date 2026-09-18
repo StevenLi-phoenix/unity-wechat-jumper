@@ -24,3 +24,11 @@ Version 1.1 presentation:
 - --qa is desktop-only, runs in the background and never saves best scores.
 - Browser checks must use Chrome Work and explicitly announce when browser use ends.
 - The user confirmed itch.io works; focus on game quality rather than repeatedly checking cloud status.
+
+Desktop releases:
+- .github/workflows/release.yml runs from version tags or a manually selected existing tag.
+- BuildGame.BuildMacOS produces a Universal app; BuildWindows/BuildLinux produce x64 players.
+- PlayerSettings.bundleVersion is the version source; BuildGame must not hardcode a version.
+- scripts/check-release-version.mjs enforces tag parity; scripts/package-release.sh validates and archives complete players.
+- Release tests are included in node --test scripts/*.test.mjs.
+- Publishing waits for all three builds and attaches checksums. Do not create a version tag unless requested.

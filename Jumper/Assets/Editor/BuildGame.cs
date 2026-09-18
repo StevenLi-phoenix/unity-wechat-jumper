@@ -9,6 +9,13 @@ using UnityEngine.TextCore.LowLevel;
 public static class BuildGame {
     public static void BuildWebGL(){Build(BuildTarget.WebGL,"Build/WebGL");}
     public static void BuildDesktop(){Build(BuildTarget.StandaloneOSX,"Build/Jump Jump.app");}
+    public static void BuildMacOS(){
+        string previous=EditorUserBuildSettings.GetPlatformSettings("OSXUniversal","Architecture");
+        try {EditorUserBuildSettings.SetPlatformSettings("OSXUniversal","Architecture","x64ARM64");Build(BuildTarget.StandaloneOSX,"Build/macOS/Jump Jump.app");}
+        finally {EditorUserBuildSettings.SetPlatformSettings("OSXUniversal","Architecture",previous);}
+    }
+    public static void BuildWindows(){Build(BuildTarget.StandaloneWindows64,"Build/Windows/Jump Jump.exe");}
+    public static void BuildLinux(){Build(BuildTarget.StandaloneLinux64,"Build/Linux/Jump Jump.x86_64");}
     static void PrepareFont(string name){
         string output="Assets/Resources/Fonts/"+name+"SDF.asset";
         if(AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(output))return;
@@ -41,14 +48,18 @@ public static class BuildGame {
         if(!AssetDatabase.LoadAssetAtPath<Material>("Assets/Resources/Surface.mat"))AssetDatabase.CreateAsset(new Material(Shader.Find("Universal Render Pipeline/Lit")),"Assets/Resources/Surface.mat");
         var scene=EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
         new GameObject("Jump Jump").AddComponent<JumpGame>();EditorSceneManager.SaveScene(scene,"Assets/JumpJump.unity");
-        PlayerSettings.productName="Jump Jump";PlayerSettings.companyName="Pocket Arcade";PlayerSettings.bundleVersion="1.1.0";
+        PlayerSettings.productName="Jump Jump";PlayerSettings.companyName="Pocket Arcade";
         PlayerSettings.fullScreenMode=FullScreenMode.Windowed;PlayerSettings.resizableWindow=true;
         PlayerSettings.defaultScreenWidth=1100;PlayerSettings.defaultScreenHeight=750;
         PlayerSettings.WebGL.compressionFormat=WebGLCompressionFormat.Gzip;PlayerSettings.WebGL.decompressionFallback=true;PlayerSettings.WebGL.template="PROJECT:Itch";
         PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.WebGL,false);PlayerSettings.SetGraphicsAPIs(BuildTarget.WebGL,new[]{GraphicsDeviceType.OpenGLES3});
+        if(target!=BuildTarget.WebGL)
+            PlayerSettings.SetScriptingBackend(UnityEditor.Build.NamedBuildTarget.Standalone,ScriptingImplementation.Mono2x);
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
+        Debug.Log($"Building {target}, version {PlayerSettings.bundleVersion}, output {path}");
         AssetDatabase.SaveAssets();
         var report=BuildPipeline.BuildPlayer(new[]{"Assets/JumpJump.unity"},path,target,BuildOptions.None);
-        if(report.summary.result!=UnityEditor.Build.Reporting.BuildResult.Succeeded)throw new Exception("WebGL build failed");
+        if(report.summary.result!=UnityEditor.Build.Reporting.BuildResult.Succeeded)throw new Exception(target+" build failed");
         Debug.Log("BUILD_AND_TESTS_PASSED");
     }
 }
