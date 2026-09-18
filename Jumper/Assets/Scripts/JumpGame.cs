@@ -1,121 +1,146 @@
-using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.UI;
 
-public class JumpGame : MonoBehaviour {
-    class Pad { public Transform root; public float size; }
-    readonly List<Pad> pads=new List<Pad>();
-    readonly Dictionary<Color,Material> materials=new Dictionary<Color,Material>();
-    int generated; Transform ground;
-    Transform pawn,body; Camera cam; Text scoreLabel,hint,bestLabel; Image meter;
-    int current,score,combo,best; float charge,flight,fall; bool charging,flying,dead;
-    Vector3 start,end,focus; Font font; Material pawnMat;
-    readonly Color[] colors={new Color(.98f,.68f,.31f),new Color(.32f,.68f,.65f),new Color(.75f,.57f,.79f),new Color(.9f,.48f,.40f)};
+public sealed class JumpGame : MonoBehaviour {
+    readonly JumpSession session=new JumpSession();
+    JumpWorld world;JumpHud hud;JumpAudio sound;Camera cam;
+    Vector3 focus,start,end;float flight,fall,shake,elapsed;int best,initialBest;bool guide=true,qa;
     void Start(){
         Application.targetFrameRate=60;
-        font=Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        cam=new GameObject("Isometric camera").AddComponent<Camera>();cam.orthographic=true;cam.orthographicSize=6.5f;
-        cam.backgroundColor=new Color(.91f,.92f,.86f);cam.clearFlags=CameraClearFlags.SolidColor;
-        cam.transform.rotation=Quaternion.Euler(36,45,0);
-        var light=new GameObject("Sun").AddComponent<Light>();light.type=LightType.Directional;light.intensity=1.5f;
-        light.transform.rotation=Quaternion.Euler(50,-30,0);light.shadows=LightShadows.Soft;
-        RenderSettings.ambientLight=new Color(.7f,.75f,.8f);
-        ground=Shape("Ground",PrimitiveType.Cube,null,new Vector3(0,-1.2f,0),new Vector3(150,.1f,150),Mat(new Color(.83f,.85f,.79f)));
-        MakeUI();ResetGame();
+#if !UNITY_WEBGL
+        qa=System.Array.IndexOf(System.Environment.GetCommandLineArgs(),"--qa")>=0;
+#endif
+        Application.runInBackground=qa;
+        cam=new GameObject("Postcard camera").AddComponent<Camera>();cam.orthographic=true;cam.orthographicSize=5.5f;cam.nearClipPlane=.1f;cam.farClipPlane=180;
+        cam.backgroundColor=JumpWorld.Blue;cam.clearFlags=CameraClearFlags.SolidColor;cam.gameObject.AddComponent<AudioListener>();
+        var sun=new GameObject("Afternoon sunshine").AddComponent<Light>();sun.type=LightType.Directional;sun.intensity=.82f;sun.color=new Color(1,.94f,.84f);sun.shadows=LightShadows.Soft;sun.shadowStrength=.55f;sun.transform.rotation=Quaternion.Euler(48,-30,0);
+        RenderSettings.ambientMode=UnityEngine.Rendering.AmbientMode.Flat;RenderSettings.ambientLight=new Color(.32f,.37f,.46f);
+        RenderSettings.fog=true;RenderSettings.fogColor=JumpWorld.Blue;RenderSettings.fogMode=FogMode.Linear;RenderSettings.fogStartDistance=25;RenderSettings.fogEndDistance=95;
+        world=new GameObject("Toybox rooftops").AddComponent<JumpWorld>();world.Initialize();
+        hud=new GameObject("Postcard HUD").AddComponent<JumpHud>();hud.Initialize();
+        sound=gameObject.AddComponent<JumpAudio>();sound.Initialize();
+        best=qa?0:PlayerPrefs.GetInt("JumperBest",0);guide=PlayerPrefs.GetInt("JumperGuide",1)==1;
+        hud.StartClicked=StartRun;hud.PauseClicked=TogglePause;hud.ResumeClicked=TogglePause;
+        hud.MuteClicked=ToggleMute;hud.AssistClicked=()=>{guide=!guide;if(!qa){PlayerPrefs.SetInt("JumperGuide",guide?1:0);PlayerPrefs.Save();}hud.Settings(sound.Muted,guide);};
+        hud.Settings(sound.Muted,guide);
+        focus=(world.CurrentPad.Position+world.Next.Position)*.5f;
+        UpdateCamera(1);Debug.Log("JUMPER_READY v1.1");
+#if !UNITY_WEBGL
+        if(qa)StartCoroutine(QA());
+#endif
     }
-    Material Mat(Color c){if(materials.TryGetValue(c,out var cached))return cached;var m=new Material(Shader.Find("Universal Render Pipeline/Lit"));m.color=c;materials[c]=m;return m;}
-    void OnDestroy(){foreach(var m in materials.Values)Destroy(m);}
-    void OnApplicationFocus(bool focused){if(!focused && charging){charging=false;charge=0;if(pawn)pawn.localScale=Vector3.one;}}
-    Transform Shape(string name,PrimitiveType type,Transform parent,Vector3 pos,Vector3 scale,Material mat){
-        var g=GameObject.CreatePrimitive(type);g.name=name;g.transform.SetParent(parent,false);g.transform.localPosition=pos;g.transform.localScale=scale;g.GetComponent<Renderer>().sharedMaterial=mat;return g.transform;
+    void StartRun(){
+        world.Reset();session.StartRun();flight=fall=0;initialBest=best;focus=(world.CurrentPad.Position+world.Next.Position)*.5f;
+        sound.Begin();hud.Show(session.Phase);hud.Toast("Let's go!");Debug.Log("JUMPER_RUN_START");
     }
-    void AddPad(Vector3 pos){
-        int n=generated++;float size=n<2?2:Random.Range(1.5f,2.1f);
-        var root=new GameObject("Platform "+n).transform;root.position=pos;
-        var mat=Mat(colors[n%colors.Length]);
-        Shape("Block",PrimitiveType.Cube,root,new Vector3(0,-.55f,0),new Vector3(size,1.1f,size),mat);
-        Shape("Center target",PrimitiveType.Cylinder,root,new Vector3(0,.012f,0),new Vector3(.48f,.018f,.48f),Mat(new Color(1,.96f,.82f)));
-        if(n%3==1){
-            Shape("Band",PrimitiveType.Cube,root,new Vector3(0,-.3f,0),new Vector3(size+.012f,.12f,size+.012f),Mat(new Color(1,.94f,.78f)));
-        }
-        pads.Add(new Pad{root=root,size=size});
+    void ToggleMute(){sound.Toggle();hud.Settings(sound.Muted,guide);}
+    void TogglePause(){
+        if(session.Phase==JumpPhase.Paused){session.Resume();sound.Pause(false);}
+        else {session.Pause();sound.Pause(session.Phase==JumpPhase.Paused);}
+        hud.Show(session.Phase);
     }
-    void NextPad(){
-        var prev=pads[pads.Count-1].root.position;
-        AddPad(prev+(Random.value>.5f?Vector3.right:Vector3.forward)*Random.Range(2.65f,3.8f));
-    }
-    void ResetGame(){
-        foreach(var p in pads)Destroy(p.root.gameObject);pads.Clear();if(pawn)Destroy(pawn.gameObject);
-        generated=current=score=combo=0;charge=flight=fall=0;charging=flying=dead=false;
-        AddPad(Vector3.zero);NextPad();NextPad();
-        pawn=new GameObject("Jumper").transform;pawn.position=Vector3.zero;
-        pawnMat=Mat(new Color(.15f,.20f,.25f));
-        body=Shape("Body",PrimitiveType.Capsule,pawn,new Vector3(0,.46f,0),new Vector3(.35f,.45f,.35f),pawnMat);
-        Shape("Head",PrimitiveType.Sphere,pawn,new Vector3(0,1,0),Vector3.one*.43f,pawnMat);
-        Shape("Collar",PrimitiveType.Cylinder,pawn,new Vector3(0,.78f,0),new Vector3(.3f,.04f,.3f),Mat(new Color(1,.8f,.35f)));
-        best=PlayerPrefs.GetInt("JumperBest",0);focus=(pads[0].root.position+pads[1].root.position)*.5f;
-        UpdateLabels();hint.text="HOLD TO CHARGE  /  RELEASE TO JUMP";Debug.Log("JUMPER_RESET");
+    void OnApplicationFocus(bool focused){
+        if(!focused&&session!=null){session.CancelCharge();if(sound)sound.Charge(0,false);if(world&&world.Model)world.Model.localScale=Vector3.one;}
     }
     void Update(){
-        bool down=(Mouse.current!=null&&Mouse.current.leftButton.wasPressedThisFrame)||(Keyboard.current!=null&&Keyboard.current.spaceKey.wasPressedThisFrame)||(Touchscreen.current!=null&&Touchscreen.current.primaryTouch.press.wasPressedThisFrame);
-        bool up=(Mouse.current!=null&&Mouse.current.leftButton.wasReleasedThisFrame)||(Keyboard.current!=null&&Keyboard.current.spaceKey.wasReleasedThisFrame)||(Touchscreen.current!=null&&Touchscreen.current.primaryTouch.press.wasReleasedThisFrame);
-        if(dead){
-            fall+=Time.deltaTime;pawn.position+=Vector3.down*Time.deltaTime*fall*9;pawn.Rotate(0,0,Time.deltaTime*150);
-            if(down&&fall>.5f)ResetGame();
-        }else if(flying){
-            flight+=Time.deltaTime/.62f;float t=Mathf.Clamp01(flight);
-            pawn.position=Vector3.Lerp(start,end,t)+Vector3.up*(4*2.2f*t*(1-t));
-            pawn.rotation=Quaternion.AngleAxis(t*360,Vector3.Cross(Vector3.up,end-start).normalized);
-            if(t>=1){flying=false;pawn.rotation=Quaternion.identity;Land();}
-        }else{
-            if(down){charging=true;charge=0;}
-            if(charging){charge=Mathf.Min(1,charge+Time.deltaTime/.95f);pawn.localScale=new Vector3(1+charge*.25f,1-charge*.32f,1+charge*.25f);}
-            if(up&&charging){
-                charging=false;flying=true;flight=0;start=pawn.position;
-                end=start+(pads[current+1].root.position-start).normalized*JumpRules.Distance(charge);
-                pawn.localScale=Vector3.one;Debug.Log("JUMPER_JUMP charge="+charge.ToString("F2"));
-            }
+        float dt=Mathf.Min(Time.deltaTime,.05f);elapsed+=dt;
+        var kb=Keyboard.current;var mouse=Mouse.current;var touch=Touchscreen.current;
+        bool touchDown=touch!=null&&touch.primaryTouch.press.wasPressedThisFrame;
+        bool pointerDown=touchDown||(mouse!=null&&mouse.leftButton.wasPressedThisFrame);
+        bool pointerUp=(touch!=null&&touch.primaryTouch.press.wasReleasedThisFrame)||(mouse!=null&&mouse.leftButton.wasReleasedThisFrame);
+        Vector2 pointer=touchDown?touch.primaryTouch.position.ReadValue():mouse!=null?mouse.position.ReadValue():Vector2.zero;
+        bool space=kb!=null&&kb.spaceKey.wasPressedThisFrame,release=kb!=null&&kb.spaceKey.wasReleasedThisFrame;
+        if(!qa){
+            if(kb!=null&&kb.mKey.wasPressedThisFrame)ToggleMute();
+            if(kb!=null&&kb.escapeKey.wasPressedThisFrame)TogglePause();
+            bool consumed=pointerDown&&hud.HandlePress(pointer);
+            if((space||(kb!=null&&kb.enterKey.wasPressedThisFrame))&&(session.Phase==JumpPhase.Title||session.Phase==JumpPhase.Result)){StartRun();space=false;}
+            if(!consumed&&(pointerDown||space)&&session.Phase==JumpPhase.Ready)session.BeginCharge();
+            if((pointerUp||release)&&session.Phase==JumpPhase.Charging)Launch();
         }
-        meter.fillAmount=charging?charge:0;
-        var target=(pads[current].root.position+pads[current+1].root.position)*.5f;
-        focus=Vector3.Lerp(focus,target,1-Mathf.Exp(-Time.deltaTime*4));
-        cam.orthographicSize=Mathf.Max(5.3f,5.5f/Mathf.Max(.65f,cam.aspect));
-        cam.transform.position=focus+new Vector3(-9,11,-9);
-        cam.transform.LookAt(focus);
-        ground.position=new Vector3(focus.x,-1.2f,focus.z);
+        if(session.Phase==JumpPhase.Charging){
+            session.TickCharge(dt);float q=session.Charge;
+            world.Model.localScale=new Vector3(1+q*.3f,1-q*.35f,1+q*.3f);
+            world.Model.localPosition=new Vector3(Mathf.Sin(elapsed*70)*q*.018f,0,0);
+        }else if(session.Phase==JumpPhase.Flight){
+            flight+=dt/.63f;float t=Mathf.Clamp01(flight);
+            world.Pawn.position=Vector3.Lerp(start,end,t)+Vector3.up*(4*2.35f*t*(1-t));
+            world.Model.rotation=Quaternion.AngleAxis(360*t,Vector3.Cross(Vector3.up,end-start).normalized);
+            if(t>=1){world.Model.rotation=Quaternion.identity;Land();}
+        }else if(session.Phase==JumpPhase.Falling){
+            fall+=dt;world.Pawn.position+=Vector3.down*(dt*(2+fall*8));world.Model.Rotate(0,0,dt*170);
+            if(fall>.8f){session.Finish();hud.Results(session,session.Score>initialBest);Debug.Log("JUMPER_RESULT score="+session.Score);}
+        }else if(session.Phase==JumpPhase.Ready||session.Phase==JumpPhase.Title){
+            world.Model.localScale=Vector3.Lerp(world.Model.localScale,Vector3.one,dt*12);
+            world.Model.localPosition=new Vector3(0,Mathf.Sin(elapsed*3)*.022f,0);
+        }
+        bool paused=session.Phase==JumpPhase.Paused;
+        sound.Charge(session.Charge,session.Phase==JumpPhase.Charging);
+        world.Animate(dt,focus,paused);
+        if(!paused)UpdateCamera(dt);
+        float target=(Vector3.Distance(world.Pawn.position,world.Next.Position)-.65f)/4;
+        hud.Refresh(session,best,target,guide,paused?0:dt);
+    }
+    void Launch(){
+        if(session.Phase!=JumpPhase.Charging)return;
+        session.Release();flight=0;start=world.Pawn.position;
+        end=start+(world.Next.Position-start).normalized*JumpRules.Distance(session.Charge);
+        world.Model.localScale=Vector3.one;world.Model.localPosition=Vector3.zero;
+        world.Pawn.GetComponent<TrailRenderer>().emitting=true;
+        sound.Jump();Debug.Log("JUMPER_JUMP charge="+session.Charge.ToString("F3"));
     }
     void Land(){
-        var p=pads[current+1];
-        if(JumpRules.Lands(end,p.root.position,p.size)){
-            bool perfect=JumpRules.Perfect(end,p.root.position);combo=perfect?combo+1:0;
-            score+=JumpRules.Points(perfect,combo);current++;NextPad();
-            hint.text=perfect?"PERFECT  +"+JumpRules.Points(true,combo):"NICE JUMP  +1";
-            if(score>best){best=score;PlayerPrefs.SetInt("JumperBest",best);PlayerPrefs.Save();}
-            if(current>4){Destroy(pads[0].root.gameObject);pads.RemoveAt(0);current--;}
-            UpdateLabels();Debug.Log("JUMPER_LANDED score="+score);
-        }else if(JumpRules.Lands(end,pads[current].root.position,pads[current].size)){hint.text="A LITTLE LONGER — HOLD TO CHARGE";}
-        else{dead=true;fall=0;hint.text="MISSED!  CLICK / SPACE TO TRY AGAIN";Debug.Log("JUMPER_GAME_OVER score="+score);}
+        world.Pawn.GetComponent<TrailRenderer>().emitting=false;
+        var p=world.Next;
+        if(JumpRules.Lands(end,p.Position,p.Size)){
+            bool perfect=JumpRules.Perfect(end,p.Position);int oldDistrict=session.District;
+            session.Land(perfect,perfect);world.Advance(perfect);world.Burst(end,perfect);shake=perfect?.12f:.05f;
+            sound.Land(perfect,session.Combo);
+            hud.Toast(perfect?(session.Combo>1?"Perfect x"+session.Combo:"Perfect!")+"  +"+session.LastAward:"Nice!  +1",perfect);
+            if(oldDistrict!=session.District)hud.Toast("New neighborhood!",true);
+            if(session.Score>best){best=session.Score;if(!qa){PlayerPrefs.SetInt("JumperBest",best);PlayerPrefs.Save();}}
+            Debug.Log("JUMPER_LANDED score="+session.Score+" hops="+session.Hops+" perfect="+perfect);
+        }else if(JumpRules.Lands(end,world.CurrentPad.Position,world.CurrentPad.Size)){
+            session.LandBack();sound.Land(false,0);hud.Toast("A little more charge!");
+        }else{
+            session.Miss();fall=0;sound.Miss();shake=.2f;hud.Toast("So close!");Debug.Log("JUMPER_MISS");
+        }
     }
-    void UpdateLabels(){scoreLabel.text=score.ToString("00");bestLabel.text="BEST  "+best.ToString("00");}
-    Text Label(Transform parent,string value,int size,Vector2 anchor,Vector2 pos,Vector2 dimensions,TextAnchor alignment){
-        var go=new GameObject(value,typeof(RectTransform));go.transform.SetParent(parent,false);
-        var r=go.GetComponent<RectTransform>();r.anchorMin=r.anchorMax=anchor;r.anchoredPosition=pos;r.sizeDelta=dimensions;
-        var t=go.AddComponent<Text>();t.font=font;t.fontSize=size;t.color=new Color(.15f,.22f,.25f);t.alignment=alignment;t.text=value;return t;
+    void UpdateCamera(float dt){
+        Vector3 target=(world.CurrentPad.Position+world.Next.Position)*.5f;
+        if(session.Phase==JumpPhase.Title)target+=new Vector3(-1,0,1)*1.65f;
+        focus=Vector3.Lerp(focus,target,1-Mathf.Exp(-dt*4));
+        cam.orthographicSize=Mathf.Max(5.4f,5.7f/Mathf.Max(.65f,cam.aspect));
+        cam.transform.position=focus+new Vector3(-10,12,-10);cam.transform.LookAt(focus);
+        if(shake>0){cam.transform.position+=Random.insideUnitSphere*shake;shake=Mathf.Max(0,shake-dt*.7f);}
     }
-    void MakeUI(){
-        var go=new GameObject("HUD");var canvas=go.AddComponent<Canvas>();canvas.renderMode=RenderMode.ScreenSpaceOverlay;
-        var scaler=go.AddComponent<CanvasScaler>();scaler.uiScaleMode=CanvasScaler.ScaleMode.ScaleWithScreenSize;scaler.referenceResolution=new Vector2(1100,750);scaler.screenMatchMode=CanvasScaler.ScreenMatchMode.Expand;
-        Label(go.transform,"POCKET / ARCADE",16,new Vector2(0,1),new Vector2(150,-40),new Vector2(260,30),TextAnchor.MiddleLeft);
-        Label(go.transform,"JUMP JUMP",30,new Vector2(0,1),new Vector2(150,-75),new Vector2(260,45),TextAnchor.MiddleLeft);
-        bestLabel=Label(go.transform,"BEST 00",18,new Vector2(1,1),new Vector2(-110,-42),new Vector2(180,35),TextAnchor.MiddleRight);
-        scoreLabel=Label(go.transform,"00",76,new Vector2(.5f,1),new Vector2(0,-95),new Vector2(250,100),TextAnchor.MiddleCenter);
-        hint=Label(go.transform,"",20,new Vector2(.5f,0),new Vector2(0,72),new Vector2(900,45),TextAnchor.MiddleCenter);
-        Label(go.transform,"MOUSE / TOUCH / SPACE     •     LAND IN THE CENTER FOR COMBOS",13,new Vector2(.5f,0),new Vector2(0,30),new Vector2(900,25),TextAnchor.MiddleCenter);
-        var bar=new GameObject("Charge",typeof(RectTransform));bar.transform.SetParent(go.transform,false);
-        var rt=bar.GetComponent<RectTransform>();rt.anchorMin=rt.anchorMax=new Vector2(.5f,0);rt.anchoredPosition=new Vector2(0,110);rt.sizeDelta=new Vector2(250,8);
-        meter=bar.AddComponent<Image>();meter.color=new Color(.95f,.55f,.22f);meter.type=Image.Type.Filled;meter.fillMethod=Image.FillMethod.Horizontal;
-        // Filled UI images require a sprite.
-        meter.sprite=Sprite.Create(Texture2D.whiteTexture,new Rect(0,0,Texture2D.whiteTexture.width,Texture2D.whiteTexture.height),Vector2.one*.5f);
+#if !UNITY_WEBGL
+    void Capture(string stage){ScreenCapture.CaptureScreenshot("/tmp/jumper-"+stage+(Screen.width<Screen.height?"-portrait":"")+".png");}
+    IEnumerator QA(){
+        yield return new WaitForSeconds(1);
+        Capture("title");yield return new WaitForSeconds(.3f);
+        StartRun();yield return new WaitForSeconds(.3f);
+        for(int i=0;i<15;i++){
+            session.BeginCharge();
+            float q=(Vector3.Distance(world.Pawn.position,world.Next.Position)-.65f)/4;
+            session.TickCharge(q*.95f);Launch();
+            float timeout=0;while(session.Phase==JumpPhase.Flight&&timeout<3){timeout+=Time.deltaTime;yield return null;}
+            if(session.Hops!=i+1){Debug.LogError("QA_FAILED hop "+i);Application.Quit(2);yield break;}
+            if(i==2){Capture("gameplay");yield return new WaitForSeconds(.2f);}
+            yield return new WaitForSeconds(.15f);
+        }
+        TogglePause();yield return new WaitForSeconds(.2f);TogglePause();
+        if(session.Phase!=JumpPhase.Ready||world.ActivePads>9){Debug.LogError("QA_FAILED pause or platform bound");Application.Quit(2);yield break;}
+        session.BeginCharge();session.TickCharge(1);Launch();
+        // Force a known miss after launching to verify result transition independently of route geometry.
+        end=world.Next.Position+Vector3.right*10;
+        float wait=0;while(session.Phase!=JumpPhase.Result&&wait<4){wait+=Time.deltaTime;yield return null;}
+        if(session.Phase!=JumpPhase.Result){Debug.LogError("QA_FAILED result");Application.Quit(2);yield break;}
+        Capture("result");yield return new WaitForSeconds(.3f);
+        StartRun();if(session.Score!=0||session.Hops!=0){Debug.LogError("QA_FAILED retry");Application.Quit(2);yield break;}
+        Debug.Log("JUMPER_RUNTIME_QA_PASSED: 15 landings, bounded platforms, pause, miss, result, retry");
+        yield return new WaitForSeconds(.3f);Application.Quit(0);
     }
+#endif
 }

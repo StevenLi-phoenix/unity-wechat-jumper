@@ -13,3 +13,14 @@ Required repository secrets: UNITY_LICENSE, UNITY_EMAIL, UNITY_PASSWORD, BUTLER_
 GitHub secrets cannot be read back or copied from another repository via gh.
 Do not modify the Flappy Bird repository to run this project.
 Verify cloud completion and actual live rendering separately.
+
+Version 1.1 presentation:
+- JumpSession is the pure run-state model; JumpTests has 38 rules/audio checks.
+- JumpWorld owns all geometry, cached materials, bounded platform history and effects.
+- JumpHud uses static TextMeshPro SDF atlases generated from the bundled Bungee/Lato fonts.
+  Do not revert to dynamic legacy Text: score changes invalidated other glyph meshes.
+- JumpAudio generates bounded PCM and music; tests cover finite samples, envelopes and headroom.
+- scripts/test-desktop.sh runs landscape and portrait native fixtures.
+- --qa is desktop-only, runs in the background and never saves best scores.
+- Browser checks must use Chrome Work and explicitly announce when browser use ends.
+- The user confirmed itch.io works; focus on game quality rather than repeatedly checking cloud status.

@@ -5,15 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{{{ PRODUCT_NAME }}}</title>
   <style>
-    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#e8ebdb}
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#79cfea}
     #unity-canvas{display:block;width:100%;height:100%;outline:none;touch-action:none}
     #loading{position:fixed;inset:0;display:grid;place-content:center;gap:16px;text-align:center;font:600 20px system-ui;color:#27423f;background:#e8ebdb;transition:opacity .25s}
-    progress{width:220px;accent-color:#fff8da}#error{max-width:28em;padding:24px}
+    progress{width:260px;accent-color:#f45b69;height:12px;margin:auto}#error{max-width:28em;padding:24px}.brand{font-size:clamp(48px,10vw,92px);font-weight:1000;line-height:.9;letter-spacing:-4px;text-shadow:4px 5px #fff4de;margin-bottom:12px}.blocks{display:flex;justify-content:center;gap:12px;margin:10px}.blocks i{display:block;width:40px;height:40px;background:#ffd85a;box-shadow:0 8px #233457;transform:rotate(-8deg)}.blocks i:nth-child(2){background:#f45b69;transform:translateY(-14px) rotate(8deg)}.blocks i:nth-child(3){background:#62d5b4}
   </style>
 </head>
 <body>
   <canvas id="unity-canvas" tabindex="0" aria-label="Jump Jump game"></canvas>
-  <div id="loading"><span>Building your next jump…</span><progress id="progress" max="1" value="0"></progress><div id="error" hidden></div></div>
+  <div id="loading"><div class="blocks" aria-hidden="true"><i></i><i></i><i></i></div><div class="brand">JUMP<br>JUMP!</div><span>Packing tiny rooftops…</span><progress id="progress" max="1" value="0"></progress><div id="error" hidden></div></div>
   <script src="Build/{{{ LOADER_FILENAME }}}"></script>
   <script>
     const canvas=document.getElementById('unity-canvas');
