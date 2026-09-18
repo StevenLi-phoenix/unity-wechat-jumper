@@ -9,3 +9,4 @@ Jumper/[Uu]serSettings/
 .DS_Store
 .secret/
 *.bak.*
+Jumper/Data/

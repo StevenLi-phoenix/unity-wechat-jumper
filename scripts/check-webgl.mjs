@@ -28,4 +28,4 @@ export async function validate(root) {
   }
   console.log(`WEBGL_PACKAGE_OK: ${files.length} files, ${(total/1024/1024).toFixed(1)} MiB`);
 }
-if(process.argv[1]===new URL(import.meta.url).pathname)await validate(process.argv[2]||'FlappyBird/Build/WebGL');
+if(process.argv[1]===new URL(import.meta.url).pathname)await validate(process.argv[2]||'Jumper/Build/WebGL');

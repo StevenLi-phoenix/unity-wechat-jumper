@@ -1,0 +1,103 @@
+name: Unity WebGL CI and itch.io
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: jumper-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/*.test.mjs
+  build:
+    needs: validate
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check Unity CI credentials
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in UNITY_LICENSE UNITY_EMAIL UNITY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing repository secret: $name. Configure it in this repository Actions secrets."
+              missing=1
+            fi
+          done
+          exit "$missing"
+      - uses: actions/cache@v4
+        with:
+          path: Jumper/Library
+          key: unity-webgl-${{ hashFiles('Jumper/ProjectSettings/ProjectVersion.txt', 'Jumper/Packages/packages-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            unity-webgl-${{ hashFiles('Jumper/ProjectSettings/ProjectVersion.txt', 'Jumper/Packages/packages-lock.json') }}-
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: Jumper
+          unityVersion: 6000.6.0f1
+          targetPlatform: WebGL
+          buildMethod: BuildGame.BuildWebGL
+          versioning: None
+      - run: node scripts/check-webgl.mjs Jumper/Build/WebGL
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webgl-${{ github.sha }}
+          path: Jumper/Build/WebGL
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: itch-production
+      url: https://stevenli-phoenix-work.itch.io/jump-jump
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: webgl-${{ github.sha }}
+          path: webgl
+      - name: Install official butler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 \
+            https://broth.itch.zone/butler/linux-amd64/15.31.0/archive/default -o "$RUNNER_TEMP/butler.zip"
+          unzip -q "$RUNNER_TEMP/butler.zip" -d "$RUNNER_TEMP/butler"
+          chmod +x "$RUNNER_TEMP/butler/butler"
+          "$RUNNER_TEMP/butler/butler" version
+      - name: Publish browser channel
+        shell: bash
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$BUTLER_API_KEY" || { echo 'Missing BUTLER_API_KEY repository secret'; exit 1; }
+          test -f webgl/index.html
+          "$RUNNER_TEMP/butler/butler" push webgl stevenli-phoenix-work/jump-jump:html5 --userversion "$GITHUB_SHA"
+          "$RUNNER_TEMP/butler/butler" status stevenli-phoenix-work/jump-jump:html5

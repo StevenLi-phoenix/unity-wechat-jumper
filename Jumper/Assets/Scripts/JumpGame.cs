@@ -6,6 +6,8 @@ using UnityEngine.UI;
 public class JumpGame : MonoBehaviour {
     class Pad { public Transform root; public float size; }
     readonly List<Pad> pads=new List<Pad>();
+    readonly Dictionary<Color,Material> materials=new Dictionary<Color,Material>();
+    int generated; Transform ground;
     Transform pawn,body; Camera cam; Text scoreLabel,hint,bestLabel; Image meter;
     int current,score,combo,best; float charge,flight,fall; bool charging,flying,dead;
     Vector3 start,end,focus; Font font; Material pawnMat;
@@ -19,14 +21,17 @@ public class JumpGame : MonoBehaviour {
         var light=new GameObject("Sun").AddComponent<Light>();light.type=LightType.Directional;light.intensity=1.5f;
         light.transform.rotation=Quaternion.Euler(50,-30,0);light.shadows=LightShadows.Soft;
         RenderSettings.ambientLight=new Color(.7f,.75f,.8f);
+        ground=Shape("Ground",PrimitiveType.Cube,null,new Vector3(0,-1.2f,0),new Vector3(150,.1f,150),Mat(new Color(.83f,.85f,.79f)));
         MakeUI();ResetGame();
     }
-    Material Mat(Color c){var m=new Material(Shader.Find("Universal Render Pipeline/Lit"));m.color=c;return m;}
+    Material Mat(Color c){if(materials.TryGetValue(c,out var cached))return cached;var m=new Material(Shader.Find("Universal Render Pipeline/Lit"));m.color=c;materials[c]=m;return m;}
+    void OnDestroy(){foreach(var m in materials.Values)Destroy(m);}
+    void OnApplicationFocus(bool focused){if(!focused && charging){charging=false;charge=0;if(pawn)pawn.localScale=Vector3.one;}}
     Transform Shape(string name,PrimitiveType type,Transform parent,Vector3 pos,Vector3 scale,Material mat){
         var g=GameObject.CreatePrimitive(type);g.name=name;g.transform.SetParent(parent,false);g.transform.localPosition=pos;g.transform.localScale=scale;g.GetComponent<Renderer>().sharedMaterial=mat;return g.transform;
     }
     void AddPad(Vector3 pos){
-        int n=pads.Count;float size=n<2?2:Random.Range(1.5f,2.1f);
+        int n=generated++;float size=n<2?2:Random.Range(1.5f,2.1f);
         var root=new GameObject("Platform "+n).transform;root.position=pos;
         var mat=Mat(colors[n%colors.Length]);
         Shape("Block",PrimitiveType.Cube,root,new Vector3(0,-.55f,0),new Vector3(size,1.1f,size),mat);
@@ -42,7 +47,7 @@ public class JumpGame : MonoBehaviour {
     }
     void ResetGame(){
         foreach(var p in pads)Destroy(p.root.gameObject);pads.Clear();if(pawn)Destroy(pawn.gameObject);
-        current=score=combo=0;charge=flight=fall=0;charging=flying=dead=false;
+        generated=current=score=combo=0;charge=flight=fall=0;charging=flying=dead=false;
         AddPad(Vector3.zero);NextPad();NextPad();
         pawn=new GameObject("Jumper").transform;pawn.position=Vector3.zero;
         pawnMat=Mat(new Color(.15f,.20f,.25f));
@@ -78,6 +83,7 @@ public class JumpGame : MonoBehaviour {
         cam.orthographicSize=Mathf.Max(5.3f,5.5f/Mathf.Max(.65f,cam.aspect));
         cam.transform.position=focus+new Vector3(-9,11,-9);
         cam.transform.LookAt(focus);
+        ground.position=new Vector3(focus.x,-1.2f,focus.z);
     }
     void Land(){
         var p=pads[current+1];
@@ -86,7 +92,7 @@ public class JumpGame : MonoBehaviour {
             score+=JumpRules.Points(perfect,combo);current++;NextPad();
             hint.text=perfect?"PERFECT  +"+JumpRules.Points(true,combo):"NICE JUMP  +1";
             if(score>best){best=score;PlayerPrefs.SetInt("JumperBest",best);PlayerPrefs.Save();}
-            if(current>4)pads[current-5].root.gameObject.SetActive(false);
+            if(current>4){Destroy(pads[0].root.gameObject);pads.RemoveAt(0);current--;}
             UpdateLabels();Debug.Log("JUMPER_LANDED score="+score);
         }else if(JumpRules.Lands(end,pads[current].root.position,pads[current].size)){hint.text="A LITTLE LONGER — HOLD TO CHARGE";}
         else{dead=true;fall=0;hint.text="MISSED!  CLICK / SPACE TO TRY AGAIN";Debug.Log("JUMPER_GAME_OVER score="+score);}
