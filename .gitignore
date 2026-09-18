@@ -1,0 +1,11 @@
+Jumper/[Ll]ibrary/
+Jumper/[Tt]emp/
+Jumper/[Oo]bj/
+Jumper/[Ll]ogs/
+Jumper/[Bb]uild/
+Jumper/[Uu]serSettings/
+*.csproj
+*.sln
+.DS_Store
+.secret/
+*.bak.*
